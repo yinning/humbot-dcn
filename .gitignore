@@ -1,0 +1,10 @@
+.DS_Store
+__pycache__
+data/
+log/checkpoint
+log/events.*
+log/*.pbtxt
+log/*.ckpt*
+log/train/*
+log/eval/*
+env/
