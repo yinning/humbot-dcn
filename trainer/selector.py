@@ -1,7 +1,11 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 """
 Dynamic Coattention Network for question answering.
 Tensorflow implementation of https://arxiv.org/abs/1611.01604
 """
+
 from collections import namedtuple
 
 import numpy as np
@@ -31,6 +35,7 @@ class Model:
   def train(self, sess, context_batch, question_batch, answer_batch, guesses):
     to_return = [self._train_op, self._summaries, self._loss, self._global_step,
                  self._s, self._e]
+    # self._contexts etc are empty variables defined in TF formats (= placeholders)
     return sess.run(to_return,
                     feed_dict={self._contexts: context_batch,
                                self._questions: question_batch,
@@ -292,6 +297,7 @@ class Model:
     self._summaries = tf.summary.merge_all()
 
     return self._train_op, self._loss,
+    
 
   def build_graph(self):
     # initialize that our graph has context, questions, answers and guesses

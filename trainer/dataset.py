@@ -1,3 +1,6 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
+
 """
 Module for dataset creation.
 Usage:
@@ -14,6 +17,7 @@ from random import shuffle
 import tensorflow as tf
 from tensorflow.core.example import example_pb2
 from spacy.en import English
+from tensorflow.python.lib.io import file_io
 
 nlp = English()
 
@@ -47,7 +51,7 @@ class Vocab:
     self._id_to_token = {}
     self._size = 0
 
-    with open(file_path, 'rt', encoding='utf-8') as f:
+    with file_io.FileIO(file_path, 'r') as f:
       for line in f:
         tokens = line.split()
         # take care of white spaces
@@ -93,7 +97,7 @@ def create_vocab(input_file, output_file, max_size=200000):
   from collections import Counter
   counter = Counter()
 
-  with open(input_file, 'r', encoding='utf-8') as data_file:
+  with file_io.FileIO(input_file, 'r') as data_file:
     parsed_file = json.load(data_file)
     data = parsed_file['data']
 
@@ -107,7 +111,7 @@ def create_vocab(input_file, output_file, max_size=200000):
           counter.update(question.text)
           counter.update(map(lambda c: c.text, question))
 
-  with open(output_file, 'wt') as f:
+  with file_io.FileIO(output_file, 'w') as f:
     # reserve for special tokens
     f.write('<s> 0\n')
     f.write('</s> 0\n')
@@ -131,7 +135,7 @@ def create_dataset(input_file, output_files, split_fractions):
   from nltk.tokenize import sent_tokenize
   from tensorflow.core.example import example_pb2
 
-  with open(input_file, 'r') as data_file:
+  with file_io.FileIO(input_file, 'r') as data_file:
     parsed_file = json.load(data_file)
     data = parsed_file['data']
     len_data = len(data)
@@ -143,7 +147,7 @@ def create_dataset(input_file, output_files, split_fractions):
 
     for i in range(1, len(indices)):
       subset = data[indices[i-1]:indices[i]]
-      with open(output_files[i-1], 'wb') as writer:
+      with file_io.FileIO(output_files[i-1], 'wb') as writer:
         for datum in subset:
           for paragraph in datum['paragraphs']:
             context = nlp(paragraph['context']).text
@@ -239,6 +243,7 @@ def tokens_to_ids(text, vocab, pad_len=None, pad_id=None):
   Returns:
     A list of ints representing token ids.
   """
+  text = text.decode('utf-8') # convert to unicode (for python 2)
   ids = []
   b = vocab.tokenToId(WORD_BEGIN)
   c = vocab.tokenToId(WORD_CONTINUE)
@@ -303,17 +308,16 @@ def tf_Examples(data_path, num_epochs=None):
   while True:
     if num_epochs is not None and epoch >= num_epochs:
       break
-    filelist = glob.glob(data_path)
-    assert filelist, 'Empty filelist.'
-    shuffle(filelist)
-    for f in filelist:
-      reader = open(f, 'rb')
-      while True:
-        len_bytes = reader.read(8)
-        if not len_bytes: break
-        str_len = struct.unpack('q', len_bytes)[0]
-        example_str = struct.unpack('%ds' % str_len, reader.read(str_len))[0]
-        yield example_pb2.Example.FromString(example_str)
+    #filelist = glob.glob(data_path)
+    #assert filelist, 'Empty filelist.'
+    #shuffle(filelist)
+    reader = file_io.FileIO(data_path, 'rb')
+    while True:
+      len_bytes = reader.read(8)
+      if not len_bytes: break
+      str_len = struct.unpack('q', len_bytes)[0]
+      example_str = struct.unpack('%ds' % str_len, reader.read(str_len))[0]
+      yield example_pb2.Example.FromString(example_str)
 
     epoch += 1
 

@@ -3,7 +3,7 @@ Batch generator with bucketing support.
 Modified ver. of https://github.com/tensorflow/models/blob/master/textsum/batch_reader.py
 """
 import json
-import queue
+import Queue as queue
 import time
 
 from collections import namedtuple

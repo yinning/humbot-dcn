@@ -1,7 +1,10 @@
+# -*- coding: utf-8 -*-
+from __future__ import unicode_literals
 
 """
 Tensorflow implementation of https://arxiv.org/abs/1611.01604.
 """
+import os
 import time
 
 import numpy as np
@@ -25,11 +28,12 @@ tf.app.flags.DEFINE_string('question_key', 'question',
                            'tf.Example feature key for question.')
 tf.app.flags.DEFINE_string('answer_key', 'answer',
                            'tf.Example feature key for answer.')
+tf.app.flags.DEFINE_string('model_name', 'train_model', 'Name for the current model (should be unique)')
 tf.app.flags.DEFINE_string('log_root', 'log', 'Directory for model root.')
 tf.app.flags.DEFINE_string('train_dir', 'log/train', 'Directory for train.')
 tf.app.flags.DEFINE_string('eval_dir', 'log/eval', 'Directory for eval.')
 tf.app.flags.DEFINE_string('mode', 'train', 'train/eval/decode mode')
-tf.app.flags.DEFINE_integer('max_run_steps', 3000000,
+tf.app.flags.DEFINE_integer('max_run_steps', 2,
                             'Maximum number of run steps.')
 tf.app.flags.DEFINE_integer('max_context_sentences', 40,
                             'Max number of first sentences to use from the '
@@ -44,7 +48,7 @@ tf.app.flags.DEFINE_bool('use_bucketing', False,
 tf.app.flags.DEFINE_bool('truncate_input', False,
                          'Truncate inputs that are too long. If False, '
                          'examples that are too long are discarded.')
-tf.app.flags.DEFINE_integer('num_gpus', 1, 'Number of gpus used.')
+tf.app.flags.DEFINE_integer('num_gpus', 0, 'Number of gpus used.')
 tf.app.flags.DEFINE_integer('num_cpus', 3, 'Number of cpus used.')
 tf.app.flags.DEFINE_integer('random_seed', 123, 'A seed value for randomness.')
 
@@ -75,6 +79,7 @@ def _train(model, data_batcher):
     # Train dir is different from log_root to avoid summary directory
     # conflict with Supervisor.
     # Summaries are data that can be used to be visualized later on
+
     summary_writer = tf.summary.FileWriter(FLAGS.train_dir)
     # the supervisor is a helper that enables day-long training with resuming training when interrupted by crashes etc.
     sv = tf.train.Supervisor(logdir=FLAGS.log_root,
@@ -116,8 +121,45 @@ def _train(model, data_batcher):
       step += 1
       if step % 100 == 0:
         summary_writer.flush()
+    
+    # export model
+    sess.graph._unsafe_unfinalize()
+    export_path = os.path.join(
+      tf.compat.as_bytes(FLAGS.log_root),
+      tf.compat.as_bytes('export/%s' % FLAGS.model_name))
+    legacy_init_op = tf.group(tf.tables_initializer(), name='legacy_init_op')
+    # print('Exporting trained model to', export_path)
+    # Build the signature_def_map.
+    tensor_info_questions = tf.saved_model.utils.build_tensor_info(model._questions)
+    tensor_info_context = tf.saved_model.utils.build_tensor_info(model._contexts)
+    tensor_info_answers = tf.saved_model.utils.build_tensor_info(model._answers)
+
+    prediction_signature = (
+      tf.saved_model.signature_def_utils.build_signature_def(
+        inputs={
+        'questions': tensor_info_questions,
+        'context': tensor_info_context,
+        },
+        outputs={'answers': tensor_info_answers},
+        method_name=tf.saved_model.signature_constants.PREDICT_METHOD_NAME))
+
+
+    builder = tf.saved_model.builder.SavedModelBuilder(export_path)
+
+    
+    builder.add_meta_graph_and_variables(
+      sess, [tf.saved_model.tag_constants.SERVING],
+      signature_def_map={
+        'predict_answers':
+          prediction_signature,
+      },
+      legacy_init_op=legacy_init_op)
+    sess.graph.finalize()
+    builder.save()
+    print 'Done exporting!'
 
     sv.Stop()
+
     return running_avg_loss
 
 def _eval(model, data_batcher):
